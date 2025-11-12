@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Family Business | Missions</title>
+  <style>
+    body {
+      background: linear-gradient(145deg, #0f0f0f, #1a1a1a);
+      color: #f2f2f2;
+      font-family: 'Cinzel', serif;
+      text-align: center;
+      margin: 0;
+      padding: 0;
+    }
+
+    h1 {
+      font-size: 2.5em;
+      color: #d4af37;
+      margin-top: 40px;
+      text-shadow: 0 0 10px #000;
+    }
+
+    h2 {
+      font-size: 1.2em;
+      font-weight: 400;
+      color: #bbb;
+      margin-bottom: 30px;
+    }
+
+    .mission {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(212, 175, 55, 0.4);
+      border-radius: 12px;
+      padding: 20px;
+      margin: 20px auto;
+      width: 80%;
+      max-width: 600px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+      transition: transform 0.2s ease;
+    }
+
+    .mission:hover {
+      transform: scale(1.02);
+    }
+
+    .mission h3 {
+      color: #f5d76e;
+      margin-bottom: 10px;
+    }
+
+    .mission p {
+      margin: 5px 0;
+      color: #ccc;
+    }
+
+    button {
+      background: #d4af37;
+      color: #000;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+
+    button:hover {
+      background: #f5d76e;
+    }
+
+    button:disabled {
+      background: #444;
+      color: #999;
+      cursor: not-allowed;
+    }
+
+    .back-btn {
+      position: absolute;
+      left: 20px;
+      top: 20px;
+      background: transparent;
+      color: #d4af37;
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 1em;
+      border: 1px solid #d4af37;
+      border-radius: 8px;
+      padding: 8px 14px;
+      transition: 0.3s;
+    }
+
+    .back-btn:hover {
+      background: #d4af37;
+      color: #000;
+    }
+
+    footer {
+      margin-top: 50px;
+      font-size: 0.8em;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back-btn">⬅ Back to Main</a>
+
+  <h1>☕ The Family Business</h1>
+  <h2>Choose your missions wisely, Capo.</h2>
+
+  <p id="stats">Loading wallet...</p>
+  <div id="missions"></div>
+
+  <script>
+    const wallet = localStorage.getItem("wallet") || "user_wallet_here";
+
+    async function loadMissions() {
+      const res = await fetch(`/missions?wallet=${wallet}`);
+      const data = await res.json();
+      if (!data.success) {
+        document.getElementById("missions").innerText = "Failed to load missions.";
+        return;
+      }
+
+      const missionsDiv = document.getElementById("missions");
+      missionsDiv.innerHTML = "";
+
+      const { user, missions } = data;
+      document.getElementById("stats").innerText =
+        `LST: ${user.LST || 0} | $SAINT: ${user.SAINT || 0}`;
+
+      missions.forEach(m => {
+        const div = document.createElement("div");
+        div.className = "mission";
+        let btnText = "Start Mission";
+        let disabled = false;
+
+        if (m.completed && m.onCooldown) {
+          btnText = "On Cooldown ⏳";
+          disabled = true;
+        } else if (m.completed) {
+          btnText = "Completed ✅";
+          disabled = true;
+        }
+
+        div.innerHTML = `
+          <h3>${m.name}</h3>
+          <p>${m.description || "No details available."}</p>
+          <p><strong>Reward:</strong> ${m.reward_amount} ${m.reward_token}</p>
+          <button ${disabled ? "disabled" : ""} onclick="completeMission(${m.id})">${btnText}</button>
+        `;
+        missionsDiv.appendChild(div);
+      });
+    }
+
+    async function completeMission(id) {
+      const res = await fetch("/missions/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet, mission_id: id })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(data.message);
+        loadMissions();
+      } else {
+        alert(data.message || "Mission failed.");
+      }
+    }
+
+    async function convertLST() {
+      const res = await fetch("/missions/convert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        alert(`Converted ${data.convertedLST} LST → ${data.addedSAINT} $SAINT`);
+        loadMissions();
+      } else {
+        alert(data.message || "Conversion failed.");
+      }
+    }
+
+    const convertBtn = document.createElement("button");
+    convertBtn.textContent = "💱 Convert LST → $SAINT";
+    convertBtn.style.marginTop = "20px";
+    convertBtn.onclick = convertLST;
+    document.body.appendChild(convertBtn);
+
+    loadMissions();
+  </script>
+
+  <footer>© 2025 The Family Business. Omerta applies.</footer>
+</body>
+</html>

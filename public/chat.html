@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🍷 DeFi Goodfellas Coffee Shop</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="chat-room">
+  <div class="chat-container">
+    <h1>🍷 Welcome to the DeFi Goodfellas Bar</h1>
+    <p class="subtitle">Where loyalty meets liquidity.</p>
+
+    <div id="chat-box" class="chat-box"></div>
+
+    <div class="chat-input">
+      <input type="text" id="message-input" placeholder="Say something, Goodfella..." autocomplete="off" />
+      <button id="send-btn">Send</button>
+    </div>
+  </div>
+
+  <!-- Load Socket.io client -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="chat.js"></script>
+</body>
+</html>

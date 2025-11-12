@@ -1,0 +1,4 @@
+{
+  "user1": { "wallet": "0x123...abc", "lst": 0 },
+  "user2": { "wallet": "0x456...def", "lst": 0 }
+}

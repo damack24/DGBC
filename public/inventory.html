@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Family Vault</title>
+  <style>
+    body {
+      background-color: #0d0d0d;
+      color: #f5f5f5;
+      font-family: 'Courier New', monospace;
+      text-align: center;
+      padding: 20px;
+    }
+    .back-btn {
+      display: inline-block;
+      margin-bottom: 15px;
+      color: #00ffcc;
+      text-decoration: none;
+      border: 1px solid #00ffcc;
+      padding: 6px 14px;
+      border-radius: 6px;
+    }
+    h1 {
+      color: #00ffcc;
+      font-size: 2em;
+      margin-bottom: 5px;
+    }
+    #inventory {
+      margin-top: 25px;
+      display: grid;
+      gap: 15px;
+      justify-content: center;
+    }
+    .item {
+      border: 1px solid #444;
+      padding: 10px;
+      border-radius: 8px;
+      background: rgba(20, 20, 20, 0.85);
+      width: 280px;
+      margin: 0 auto;
+    }
+    footer {
+      margin-top: 40px;
+      font-size: 0.8em;
+      color: #777;
+    }
+  </style>
+</head>
+<body>
+  <a href="/" class="back-btn">⬅ Back to Main</a>
+  <h1>💼 The Family Vault</h1>
+  <h3>Your collected assets & trophies</h3>
+
+  <p id="status">Loading inventory...</p>
+  <div id="inventory"></div>
+
+  <script>
+    const wallet = localStorage.getItem("wallet") || "user_wallet_here";
+
+    async function loadInventory() {
+      const res = await fetch(`/inventory?wallet=${wallet}`);
+      const data = await res.json();
+
+      const invDiv = document.getElementById("inventory");
+      if (!data.success || data.items.length === 0) {
+        document.getElementById("status").innerText = "No items yet, Capo.";
+        return;
+      }
+
+      document.getElementById("status").innerText = "";
+      invDiv.innerHTML = "";
+
+      data.items.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "item";
+        div.innerHTML = `
+          <h3>${item.item_name}</h3>
+          <p>Type: ${item.item_type}</p>
+          <p>Rarity: ${item.rarity}</p>
+          <p>Obtained: ${new Date(item.obtained_at).toLocaleString()}</p>
+        `;
+        invDiv.appendChild(div);
+      });
+    }
+
+    loadInventory();
+  </script>
+
+  <footer>© 2025 The Family Business. Omerta applies.</footer>
+</body>
+</html>

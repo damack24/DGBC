@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Family Business</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Font: Cinzel (Classic Serif Look) -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        /* Custom CSS for Mafia Theme */
+        :root {
+            --color-dark: #1a1a1a;
+            --color-accent: #c4a754; /* Old Gold/Brass */
+            --color-light: #f5f5f5;
+            --font-serif: 'Cinzel', serif;
+            --font-sans: 'Inter', sans-serif;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background-color: var(--color-dark);
+            color: var(--color-light);
+            line-height: 1.6;
+        }
+
+        h1, h2, h3, .mafia-font {
+            font-family: var(--font-serif);
+            color: var(--color-accent);
+        }
+
+        .mafia-card {
+            background-color: #2b2b2b;
+            border: 1px solid var(--color-accent);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .mafia-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.7);
+        }
+
+        .mafia-button {
+            background-color: var(--color-accent);
+            color: var(--color-dark);
+            font-family: var(--font-serif);
+            padding: 0.75rem 2rem;
+            border-radius: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: background-color 0.2s, transform 0.1s;
+        }
+
+        .mafia-button:hover {
+            background-color: #d8c281;
+            transform: scale(1.02);
+        }
+
+        /* Responsive Container */
+        .dashboard-container {
+            max-width: 1400px;
+            margin: auto;
+            padding: 1rem;
+        }
+
+        /* Entry Page Background */
+        #entry-page {
+            background-image: url('https://placehold.co/1920x1080/1a1a1a/c4a754?text=The+Private+Club+Entrance');
+            background-size: cover;
+            background-position: center;
+            background-blend-mode: multiply;
+        }
+    </style>
+    <script type="module">
+        // --- LIBRARY IMPORTS ---
+        import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.min.js";
+
+        // --- CORE APPLICATION CONSTANTS ---
+        const __app_id = 'mafia-famiglia-app';
+        const apiKey = ""; // API key is provided at runtime
+
+        // --- NFT & BLOCKCHAIN CONSTANTS (from user query) ---
+        const CONTRACT_ADDRESS = "0x3f8dE7a204d8e5e3C912319a6C86fC4A476e33Fa";
+        const TOKEN_IDS = [1, 2, 3, 4, 5, 6];
+        const CHAIN_ID = 137; // Polygon Mainnet
+        const ERC1155_ABI = ["function balanceOf(address account,uint256 id) view returns (uint256)"];
+
+        let provider, signer;
+
+        // --- DOM REFERENCES ---
+        const GAME_CONTENT = document.getElementById("game-content");
+        const GAME_LOCK = document.getElementById("game-locked-message");
+        const CONNECT_BTN = document.getElementById("connect-wallet-button");
+        const WALLET_STATUS = document.getElementById("wallet-status");
+        const ENTER_BTN = document.getElementById("enter-club-button");
+        const ENTRY_PAGE = document.getElementById("entry-page");
+        const DASHBOARD = document.getElementById("dashboard");
+        const GAME_LOCK_ICON = document.getElementById('game-lock-icon');
+        const HOLDERS_LIST = document.querySelector('#holders .space-y-1');
+
+        // --- UTILITY FUNCTIONS ---
+
+        /**
+         * Utility function for exponential backoff for API calls.
+         */
+        async function runWithBackoff(fn, maxRetries = 5) {
+            let delay = 1000;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    return await fn();
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        throw error;
+                    }
+                    console.error(`Attempt ${i + 1} failed. Retrying in ${delay / 1000}s...`, error);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; // Exponential increase
+                }
+            }
+        }
+
+        // --- WALLET & NFT LOGIC (Ethers.js) ---
+
+        /**
+         * Checks if the connected wallet holds any of the required NFT token IDs.
+         */
+        async function checkNFT(address) {
+            try {
+                // Ensure the provider is connected to Polygon Mainnet
+                const network = await provider.getNetwork();
+                if (network.chainId != CHAIN_ID) {
+                    GAME_LOCK.classList.remove("hidden");
+                    GAME_CONTENT.classList.add("hidden");
+                    GAME_LOCK_ICON.textContent = '🚨';
+                    GAME_LOCK_ICON.classList.remove('text-green-500');
+                    GAME_LOCK_ICON.classList.add('text-red-500');
+                    // Do not use alert in the final implementation, log an error instead.
+                    console.error("Network mismatch: Please switch to Polygon Mainnet (Chain ID 137).");
+                    return;
+                }
+
+                const contract = new ethers.Contract(CONTRACT_ADDRESS, ERC1155_ABI, provider);
+                let hasNFT = false;
+
+                // Check balance for all required token IDs
+                for (let id of TOKEN_IDS) {
+                    const balance = await contract.balanceOf(address, id);
+                    if (balance > 0) {
+                        hasNFT = true;
+                        break; // Found one, access granted
+                    }
+                }
+                
+                // Remove any previous NFT status line
+                const existingStatus = document.getElementById('nft-status-line');
+                if (existingStatus) existingStatus.remove();
+
+                if (hasNFT) {
+                    GAME_LOCK.classList.add("hidden");
+                    GAME_CONTENT.classList.remove("hidden");
+                    GAME_LOCK_ICON.textContent = '🔑'; // Unlocked icon
+                    GAME_LOCK_ICON.classList.remove('text-red-500');
+                    GAME_LOCK_ICON.classList.add('text-green-500');
+                    
+                    // Update Holders section to show verification status
+                    HOLDERS_LIST.innerHTML += `
+                        <div id="nft-status-line" class="flex justify-between text-sm"><span>Vault Access (NFT):</span> <span class="text-green-400">VERIFIED (Holder)</span></div>
+                    `;
+                } else {
+                    GAME_LOCK.classList.remove("hidden");
+                    GAME_CONTENT.classList.add("hidden");
+                    GAME_LOCK_ICON.textContent = '🔒';
+                    GAME_LOCK_ICON.classList.remove('text-green-500');
+                    GAME_LOCK_ICON.classList.add('text-red-500');
+                }
+            } catch (err) {
+                console.error("Error checking NFT ownership:", err);
+                // Fallback to locked state on error
+                GAME_LOCK.classList.remove("hidden");
+                GAME_CONTENT.classList.add("hidden");
+            }
+        }
+
+
+        /**
+         * Handles Metamask connection and setup.
+         */
+        async function connectWallet() {
+            CONNECT_BTN.textContent = 'Connecting...';
+            CONNECT_BTN.disabled = true;
+
+            try {
+                if (!window.ethereum) {
+                    WALLET_STATUS.innerHTML = `<p class="text-sm text-red-400 mt-2">Metamask not found. Install it.</p>`;
+                    return;
+                }
+
+                const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+                const address = accounts[0];
+
+                provider = new ethers.BrowserProvider(window.ethereum);
+                signer = await provider.getSigner();
+                
+                // Update UI for connection success
+                CONNECT_BTN.textContent = 'Connected';
+                CONNECT_BTN.classList.remove('mafia-button');
+                CONNECT_BTN.classList.add('bg-green-600', 'text-white');
+
+                WALLET_STATUS.innerHTML = `
+                    <p class="text-sm text-green-400 mt-2">Status: Bound to the Famiglia.</p>
+                    <p class="text-xs text-gray-400">Address: <span id="wallet-address">${address.substring(0, 6)}...${address.substring(address.length - 4)}</span></p>
+                `;
+
+                // Check NFT ownership immediately
+                await checkNFT(address);
+
+                // Set up event listeners for state changes
+                window.ethereum.on('accountsChanged', (accounts) => {
+                    if (accounts.length > 0) {
+                        checkNFT(accounts[0]);
+                        document.getElementById("wallet-address").textContent = `${accounts[0].substring(0, 6)}...${accounts[0].substring(accounts[0].length - 4)}`;
+                    } else {
+                        // Disconnected
+                        location.reload(); // Simplest way to reset the app state
+                    }
+                });
+
+                window.ethereum.on('chainChanged', (_chainId) => {
+                    location.reload(); // Reload on network change for full state reset
+                });
+
+            } catch (error) {
+                console.error("Wallet connection failed:", error);
+                CONNECT_BTN.textContent = 'Connect Metamask Wallet';
+                CONNECT_BTN.disabled = false;
+                CONNECT_BTN.classList.remove('bg-green-600', 'text-white');
+                CONNECT_BTN.classList.add('mafia-button');
+                WALLET_STATUS.innerHTML = `<p class="text-sm text-red-400 mt-2">Connection failed.</p>`;
+            }
+        }
+
+        // --- APPLICATION LOGIC FUNCTIONS (attached to window for HTML event handlers) ---
+
+        window.enterTheClub = function() {
+            localStorage.setItem('mafia_entered', 'true');
+            // Simple display toggle for this environment
+            ENTRY_PAGE.classList.add('hidden');
+            DASHBOARD.classList.remove('hidden');
+        }
+
+        window.handleGameDecision = function(decision) {
+            const resultEl = document.getElementById('game-result');
+            const controlsEl = document.getElementById('game-controls');
+
+            // Hide controls and show result
+            controlsEl.classList.add('hidden');
+            resultEl.classList.remove('hidden', 'bg-green-900', 'text-green-300', 'bg-red-900', 'text-red-300');
+
+            if (decision === 'safe') {
+                resultEl.textContent = "A careful man lives to see tomorrow. The shipment arrived safe, a small delay, but the profit is secured. The Famiglia respects prudence.";
+                resultEl.classList.add('bg-green-900', 'text-green-300');
+            } else {
+                // Simulate 50/50 risk
+                if (Math.random() > 0.5) {
+                    resultEl.textContent = "High risk, high reward. The button men executed the push perfectly. The profit is triple, Capo. You have the Don's attention.";
+                    resultEl.classList.add('bg-green-900', 'text-green-300');
+                } else {
+                    resultEl.textContent = "You gambled too hard. The coppers were waiting. The shipment is gone. A loss of face and liquidity. You owe the Don an explanation.";
+                    resultEl.classList.add('bg-red-900', 'text-red-300');
+                }
+            }
+        }
+
+        /**
+         * Basic chat room simulation
+         */
+        function simulateChat(e) {
+            e.preventDefault();
+            const inputElement = document.getElementById('coffee-shop-input');
+            const chatLog = document.getElementById('chat-log');
+            const message = inputElement.value.trim();
+
+            if (!message) return;
+
+            // User message
+            const addressEl = document.getElementById('wallet-address');
+            const sender = addressEl ? `Capo ${addressEl.textContent}` : 'You';
+            const userMsg = `<div class="text-right mb-2"><span class="bg-gray-700 text-gray-100 p-2 rounded-lg inline-block max-w-xs">${sender}: ${message}</span></div>`;
+            chatLog.innerHTML += userMsg;
+            inputElement.value = '';
+
+            // Simulated barista reply
+            setTimeout(() => {
+                const replies = [
+                    "A wise choice, Capo. Coming right up.",
+                    "Keep your voice down, eh? We're discussing business, not pleasure.",
+                    "Heard that. We'll send a button man to handle the delivery.",
+                    "Got it. The package will arrive before the sun sets."
+                ];
+                const reply = replies[Math.floor(Math.random() * replies.length)];
+                const baristaMsg = `<div class="text-left mb-2"><span class="bg-gray-800 text-gray-400 p-2 rounded-lg inline-block max-w-xs">Barista: ${reply}</span></div>`;
+                chatLog.innerHTML += baristaMsg;
+                chatLog.scrollTop = chatLog.scrollHeight; // Scroll to bottom
+            }, 1000);
+        }
+
+        /**
+         * Calls the Gemini API to get a Godfather-style response.
+         */
+        async function callTheDon(e) {
+            e.preventDefault();
+            const userQueryElement = document.getElementById('don-query');
+            const donResponseElement = document.getElementById('don-response');
+            const loadingElement = document.getElementById('don-loading');
+            const userQuery = userQueryElement.value.trim();
+
+            if (!userQuery) {
+                donResponseElement.textContent = "You must speak, Capo. The Don doesn't have time for silence. Capiche?";
+                return;
+            }
+
+            // Show loading
+            donResponseElement.textContent = '';
+            loadingElement.classList.remove('hidden');
+
+            const systemPrompt = "You are the ultimate Mafia Godfather (Don) from the 1950s. Your responses are always stern, authoritative, wise, and rooted in the philosophy of the Famiglia. Use formal, old-world language and classic Mafia terminology (e.g., 'Capiche?', 'Consigliere', 'Omerta', 'Famiglia', 'button man', 'sit down'). Never break character. Provide a concise piece of strategic advice or instruction.";
+
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            const fetchFn = async () => {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.json();
+                    console.error("API Error:", errorBody);
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                return await response.json();
+            };
+
+            try {
+                const result = await runWithBackoff(fetchFn);
+                const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                loadingElement.classList.add('hidden');
+                if (text) {
+                    donResponseElement.innerHTML = `
+                        <h4 class="text-xl mafia-font mb-2 text-red-500">The Don's Decree:</h4>
+                        <p class="italic text-gray-300">${text}</p>
+                    `;
+                } else {
+                    donResponseElement.textContent = "The connection to the Don was cut. Someone's trying to listen in. Try again, capiche?";
+                }
+
+            } catch (error) {
+                loadingElement.classList.add('hidden');
+                console.error("Failed to communicate with the Don after all retries.", error);
+                donResponseElement.textContent = "This matter is too hot for the wires. The Don requires a sit-down in person. Failed to generate response.";
+            }
+        }
+        
+        // --- INITIALIZATION ---
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            // Check if user has already entered
+            if (localStorage.getItem('mafia_entered') === 'true') {
+                ENTRY_PAGE.classList.add('hidden');
+                DASHBOARD.classList.remove('hidden');
+            }
+
+            // Event Listeners for application functionality
+            ENTER_BTN.addEventListener('click', window.enterTheClub);
+            CONNECT_BTN.addEventListener('click', connectWallet);
+            document.getElementById('don-form').addEventListener('submit', callTheDon);
+            document.getElementById('coffee-shop-form').addEventListener('submit', simulateChat);
+        });
+    </script>
+</head>
+<body>
+    <!-- ENTRY PAGE -->
+    <div id="entry-page" class="flex flex-col items-center justify-center min-h-screen p-4 text-center">
+        <div class="p-8 md:p-12 rounded-xl bg-black bg-opacity-70 border-2 border-amber-800 shadow-2xl max-w-2xl mx-auto">
+            <h1 class="text-5xl md:text-7xl font-extrabold mb-4 text-amber-500 tracking-wider">The Family Business</h1>
+            <h2 class="text-xl md:text-2xl italic text-gray-300 mb-8">You got an invitation. Now you enter.</h2>
+            <button id="enter-club-button" class="mafia-button text-xl px-10 py-3">
+                Enter The Club
+            </button>
+            <p class="text-xs mt-6 text-gray-500">Omerta applies: Everything you see and hear stays here.</p>
+        </div>
+    </div>
+    <!-- DASHBOARD -->
+    <div id="dashboard" class="hidden dashboard-container">
+        <!-- HEADER -->
+        <header class="text-center pt-8 pb-4">
+            <h1 class="text-5xl md:text-7xl font-extrabold mb-2 text-amber-500 tracking-wider">The Family Business</h1>
+            <h2 class="text-lg md:text-xl italic text-gray-300 mb-6">Where Loyalty Meets Liquidity.</h2>
+            <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 mafia-card rounded-xl">
+                <button id="connect-wallet-button" class="mafia-button w-full sm:w-auto">
+                    Connect Metamask Wallet
+                </button>
+                <div id="wallet-status" class="text-center w-full sm:w-auto">
+                    <p class="text-sm text-gray-400">Status: Disconnected</p>
+                </div>
+            </div>
+
+            <!-- Game Button (Glow on Hover) -->
+            <div class="flex justify-center mt-6">
+                <a href="game.html">
+                    <button onclick="window.location.href='/game'" class="mafia-button">Play Missions</button>
+                    </button>
+                </a>
+            </div>
+        </header>
+        <!-- GRID LAYOUT -->
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+            <!-- COLUMN 1: FAMILY, HOLDERS, ABOUT -->
+            <div class="lg:col-span-1 space-y-8">
+                <!-- ABOUT -->
+                <section id="about" class="p-6 rounded-xl mafia-card">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">The Famiglia Vows</h3>
+                    <p class="text-gray-400 text-sm">
+                        Trust, respect, profit. An unbreakable bond of <em>omerta</em>.
+                    </p>
+                </section>
+                <!-- FAMILY -->
+                <section id="family" class="p-6 rounded-xl mafia-card">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">Famiglia Ranks</h3>
+                    <ul class="space-y-2 text-gray-300 text-sm">
+                        <li><strong class="text-amber-400">The Don:</strong> Supreme authority.</li>
+                        <li><strong class="text-amber-400">Consigliere:</strong> Strategic advisor.</li>
+                        <li><strong class="text-amber-400">Capo:</strong> Lieutenant overseeing crews.</li>
+                        <li><strong class="text-amber-400">Soldier:</strong> Button Man carrying out work.</li>
+                        <li><strong class="text-amber-400">Associate:</strong> Potential member earning bones.</li>
+                    </ul>
+                </section>
+                <!-- HOLDERS -->
+                <section id="holders" class="p-6 rounded-xl mafia-card">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">Ledger of Loyalty</h3>
+                    <p class="text-gray-400 text-sm mb-4">
+                        Your stake determines your seat at the table.
+                    </p>
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-sm"><span>Total Assets Under Command:</span> <span class="text-green-400">$12,450,000</span></div>
+                        <div class="flex justify-between text-sm"><span>Active Capos:</span> <span class="text-amber-400">8</span></div>
+                        <div class="flex justify-between text-sm"><span>Next Payout (Projected):</span> <span class="text-amber-400">Dec 1st</span></div>
+                    </div>
+                </section>
+            </div>
+            <!-- COLUMN 2 & 3: COFFEE SHOP + BAR LIST -->
+            <div class="lg:col-span-2 space-y-8">
+                <!-- COFFEE SHOP (CHAT ROOM SIMULATION) -->
+                <section id="coffee-shop" class="p-6 rounded-xl mafia-card h-[400px] flex flex-col">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">The Coffee Shop (Chat)</h3>
+                    <div id="chat-log" class="flex-grow overflow-y-auto bg-gray-900 p-4 rounded-lg mb-4 text-sm">
+                        <div class="text-left mb-2">
+                            <span class="bg-gray-800 text-gray-400 p-2 rounded-lg inline-block max-w-xs">
+                                Barista: Welcome, make your order brief.
+                            </span>
+                        </div>
+                    </div>
+                    <form id="coffee-shop-form" class="flex space-x-2">
+                        <input type="text" id="coffee-shop-input" placeholder="Whisper your order..."
+                               class="flex-grow p-3 rounded-lg bg-gray-700 text-gray-100 border border-amber-700 focus:ring-amber-500 focus:border-amber-500 outline-none" required>
+                        <button type="submit" class="mafia-button px-4 py-3 text-sm">Send</button>
+                    </form>
+                </section>
+                <!-- BAR LIST (STATIC) -->
+                <section id="bar-list" class="p-6 rounded-xl mafia-card">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">The Bar: Whiskey & Smoke</h3>
+                    <ul class="list-disc list-inside space-y-1 text-gray-400 text-sm">
+                        <li>Remy Martin Louis XIII Cognac</li>
+                        <li>Dewar’s Scotch</li>
+                        <li>Templeton Rye</li>
+                        <li>Manhattan - cocktail</li>
+                        <li>Godfather - cocktail</li>
+                        <li>Expresso</li>
+                        <li>Lemon and sugar coffee</li>
+                        <li>Black coffee with liqueur</li>
+                        <li>Loyalty reserve</li>
+                    </ul>
+                </section>
+            </div>
+            <!-- TAILOR + GARAGE -->
+            <div class="lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
+                <section id="tailor" class="p-6 rounded-xl mafia-card">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">The Tailor: Sharp Threads</h3>
+                    <ul class="list-disc list-inside space-y-2 text-gray-300 text-sm">
+                        <li>White shirts</li>
+                        <li>Polished leather shoes</li>
+                        <li>Silk tie</li>
+                        <li>Dark suits</li>
+                        <li>Fedoras</li>
+                        <li>Signet rings</li>
+                    </ul>
+                </section>
+                <section id="garage" class="p-6 rounded-xl mafia-card">
+                    <h3 class="text-3xl mb-3 border-b pb-2 border-amber-700">The Garage: Fast Escapes</h3>
+                    <ul class="list-disc list-inside space-y-2 text-gray-300 text-sm">
+                        <li>Lincoln Continental</li>
+                        <li>1928 Ford Model 18 V8</li>
+                        <li>Mercedes Benz S-Class</li>
+                        <li>1928 Cadillac Town Sedan</li>
+                        <li>Jaguar XXE</li>
+                        <li>Chevrolet Impala SS</li>
+                        <li>De Tomaso Pantera</li>
+                    </ul>
+                </section>
+            </div>
+            <!-- THE GAME ROOM (NFT GATED) -->
+            <section id="game-room-section" class="lg:col-span-3 p-8 rounded-xl mafia-card relative">
+                <h3 class="text-4xl mb-4 border-b pb-3 border-amber-700 text-center flex items-center justify-center space-x-3">
+                    <span class="text-4xl text-red-500" id="game-lock-icon">🔒</span>
+                    <span>The Vault (NFT Holder Game)</span>
+                </h3>
+                
+                <!-- Locked Message (Visible by default, hidden by checkNFT on success) -->
+                <div id="game-locked-message" class="text-center py-10">
+                    <p class="text-xl text-red-400 mafia-font">ACCESS DENIED</p>
+                    <p class="text-gray-400 mt-2">
+                        You must be a verified holder of <code class="text-amber-500">ERC-1155 Token ID 1-6</code> from the <code class="text-amber-500">0x3f8dE7...e33Fa</code> Famiglia Contract on Polygon. Connect your wallet above to verify your stake.
+                    </p>
+                </div>
+                <!-- Game Content (Hidden by default, shown by checkNFT on success) -->
+                <div id="game-content" class="hidden max-w-4xl mx-auto">
+                    <!-- Image Grid (Placeholder Images) -->
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                        <img src="https://placehold.co/200x200/4B3621/FFF?text=Black+Coffee" alt="Black Coffee" class="rounded-lg shadow-xl w-full h-auto">
+                        <img src="https://placehold.co/200x200/4B3621/FFF?text=Espresso" alt="Expresso" class="rounded-lg shadow-xl w-full h-auto">
+                        <img src="https://placehold.co/200x200/4B3621/FFF?text=Manhattan" alt="Manhattan Cocktail" class="rounded-lg shadow-xl w-full h-auto">
+                        <img src="https://placehold.co/200x200/4B3621/FFF?text=Rye+Whiskey" alt="Templeton Rye" class="rounded-lg shadow-xl w-full h-auto">
+                    </div>
+                    <!-- Game Logic -->
+                    <h4 class="text-2xl text-amber-300 mb-4 text-center mafia-font">Risk Assessment: The Shipment</h4>
+                    <p class="text-gray-400 mb-6 text-center">A shipment of "Italian goods" is en route, but the docks are hot with Feds. You have two options, Capo. Choose wisely.</p>
+                    
+                    <div id="game-controls" class="space-y-4">
+                        <button onclick="handleGameDecision('safe')" class="w-full mafia-button bg-green-800 hover:bg-green-700 text-white">
+                            Option A: Lay Low (Safe Route) - Slower, guaranteed profit.
+                        </button>
+                        <button onclick="handleGameDecision('risk')" class="w-full mafia-button bg-red-800 hover:bg-red-700 text-white">
+                            Option B: Push Through (Risky Route) - High reward, high chance of conflict.
+                        </button>
+                    </div>
+                    <p id="game-result" class="mt-6 p-4 rounded-lg text-center hidden italic"></p>
+                </div>
+            </section>
+            <!-- TALK TO THE DON -->
+            <section id="don-chat" class="lg:col-span-3 p-8 rounded-xl mafia-card">
+                <h3 class="text-4xl mb-4 border-b pb-3 border-amber-700 text-center">Talk to The Don</h3>
+                <form id="don-form" class="space-y-4">
+                    <textarea id="don-query" rows="4" placeholder="Input your problem..." 
+                        class="w-full p-4 rounded-lg bg-gray-800 text-gray-100 border border-amber-700 focus:ring-amber-500 focus:border-amber-500 outline-none resize-none" required></textarea>
+                    <button type="submit" class="mafia-button w-full">Deliver Message to Consigliere</button>
+                </form>
+                <div id="don-response-box" class="mt-8 p-6 rounded-xl bg-gray-900 border-l-4 border-red-700 min-h-[100px] flex items-center justify-center">
+                    <div id="don-loading" class="hidden text-amber-500">
+                        <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-amber-500 inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        The Don is considering your petition...
+                    </div>
+                    <p id="don-response" class="text-gray-500 italic text-center">The Don awaits your report. Speak clearly, and speak once.</p>
+                </div>
+            </section>
+        </main>
+        <!-- FOOTER -->
+        <footer class="text-center mt-12 mb-4 text-xs text-gray-600">
+            &copy; 2025 The Family Business. Remember the Omerta.
+        </footer>
+    </div>
+</body>
+</html>
